@@ -1,0 +1,143 @@
+<!DOCTYPE html><html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MILXE Streetwear</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: Arial, sans-serif;
+    }body {
+  background-color: #fff;
+  color: #000;
+}
+
+header {
+  background-color: #000;
+  color: #fff;
+  padding: 20px;
+  text-align: center;
+}
+
+header h1 {
+  font-size: 2.5rem;
+  letter-spacing: 2px;
+}
+
+nav {
+  display: flex;
+  justify-content: center;
+  background-color: #f5f5f5;
+  padding: 10px;
+  flex-wrap: wrap;
+}
+
+nav a {
+  margin: 10px;
+  text-decoration: none;
+  color: #000;
+  font-weight: bold;
+}
+
+.banner {
+  background: url('https://i.imgur.com/kd2QxzE.jpg') center/cover no-repeat;
+  height: 300px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 2rem;
+  font-weight: bold;
+  text-shadow: 2px 2px 4px rgba(0,0,0,0.7);
+}
+
+.productos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 20px;
+  padding: 40px;
+}
+
+.producto {
+  border: 1px solid #ccc;
+  padding: 15px;
+  text-align: center;
+  transition: 0.3s ease;
+}
+
+.producto:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.producto img {
+  max-width: 100%;
+  height: auto;
+}
+
+.producto button {
+  background: #000;
+  color: #fff;
+  border: none;
+  padding: 10px;
+  margin-top: 10px;
+  cursor: pointer;
+}
+
+footer {
+  background-color: #000;
+  color: #fff;
+  text-align: center;
+  padding: 15px;
+  margin-top: 40px;
+}
+
+  </style>
+</head>
+<body>
+  <header>
+    <h1>MILXE STREETWEAR</h1>
+  </header>  <nav>
+    <a href="#">Inicio</a>
+    <a href="#">Hombres</a>
+    <a href="#">Mujeres</a>
+    <a href="#">Zapatillas</a>
+    <a href="#">Accesorios</a>
+    <a href="#">Ofertas</a>
+    <a href="#">Contacto</a>
+  </nav>  <section class="banner">
+    NUEVA COLECCIÓN 2025 - MODA URBANA
+  </section>  <section class="productos">
+    <!-- Catálogo lleno de productos variados -->
+    <script>
+      const productos = [
+        {nombre: 'Buzo Oversize Nike', precio: 29000, img: 'https://i.imgur.com/v9vGlIh.jpg'},
+        {nombre: 'Remera Adidas Energy', precio: 15900, img: 'https://i.imgur.com/kts6Ybl.jpg'},
+        {nombre: 'Pantalón Puma Cargo', precio: 26500, img: 'https://i.imgur.com/ZvTL0aE.jpg'},
+        {nombre: 'Campera North Urban', precio: 48000, img: 'https://i.imgur.com/WHFqsjd.jpg'},
+        {nombre: 'Zapatillas Vans Classic', precio: 37500, img: 'https://i.imgur.com/qAdnqMy.jpg'},
+        {nombre: 'Gorra Snapback NY', precio: 9000, img: 'https://i.imgur.com/Xg3uMnF.jpg'},
+        {nombre: 'Riñonera Urbana XL', precio: 12000, img: 'https://i.imgur.com/O8syrrn.jpg'},
+        {nombre: 'Conjunto Oversize Facha', precio: 49000, img: 'https://i.imgur.com/ZY8WhxZ.jpg'},
+        {nombre: 'Musculosa Verano', precio: 8500, img: 'https://i.imgur.com/EN7gRzP.jpg'},
+        {nombre: 'Medias Cool Urban', precio: 3000, img: 'https://i.imgur.com/M0ZDdh6.jpg'},
+        {nombre: 'Chomba Urbana Premium', precio: 21000, img: 'https://i.imgur.com/FsDShLS.jpg'},
+        {nombre: 'Short Puma DryFit', precio: 17500, img: 'https://i.imgur.com/8yFL1If.jpg'}
+      ];productos.forEach(p => {
+    document.write(`
+      <div class="producto">
+        <img src="${p.img}" alt="${p.nombre}">
+        <h3>${p.nombre}</h3>
+        <p>$${p.precio}</p>
+        <button>Agregar al carrito</button>
+      </div>
+    `);
+  });
+</script>
+
+  </section>  <footer>
+    Creado por Exequiel & Milena - MILXE 2025
+  </footer>
+</body>
+</html>
