@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#1b1f4b" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="description" content="Milex Kart: carreras de karts 3D con ítems, derrapes y turbo. Jugable en celular y PC." />
+  <title>Milex Kart</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="style.css" />
+  <script type="importmap">{ "imports": { "three": "./vendor/three.module.min.js" } }</script>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <!-- ===== HUD ===== -->
+  <div id="hud" class="hidden">
+    <div id="hud-top-left">
+      <div id="itembox"><div id="itemicon"></div></div>
+    </div>
+    <div id="hud-top-right">
+      <div id="lap">VUELTA <b id="lapnum">1</b>/<span id="laptotal">3</span></div>
+      <div id="timer">0:00.000</div>
+      <div id="bestlap"></div>
+    </div>
+    <canvas id="minimap" width="180" height="180"></canvas>
+    <div id="position"><span id="posnum">1</span><sup id="possuf">°</sup></div>
+    <div id="speedo"><b id="speednum">0</b> km/h</div>
+    <div id="center-msg"></div>
+    <div id="wrongway" class="hidden">¡SENTIDO CONTRARIO!</div>
+    <button id="pausebtn" class="iconbtn" aria-label="Pausa">❚❚</button>
+    <div id="flash"></div>
+  </div>
+
+  <!-- ===== Touch controls ===== -->
+  <div id="touch" class="hidden">
+    <div id="steerpad"><div id="steerknob"></div><span class="lbl">◀ GIRAR ▶</span></div>
+    <div id="rightpad">
+      <button id="btn-item" class="tbtn">ÍTEM</button>
+      <button id="btn-drift" class="tbtn big">DERRAPE</button>
+      <button id="btn-brake" class="tbtn small">FRENO</button>
+      <button id="btn-accel" class="tbtn small">ACEL.</button>
+    </div>
+  </div>
+
+  <!-- ===== Menus ===== -->
+  <div id="menu">
+    <section id="scr-title" class="screen">
+      <h1 class="logo"><span>MILEX</span><em>KART</em></h1>
+      <p class="tag">Derrapá, juntá ítems y llegá primero</p>
+      <div class="col">
+        <button class="mbtn primary" data-go="grandprix">🏆 Gran Premio</button>
+        <button class="mbtn" data-go="single">🏁 Carrera libre</button>
+        <button class="mbtn" data-go="timetrial">⏱️ Contrarreloj</button>
+        <button class="mbtn ghost" data-go="howto">🎮 Controles</button>
+      </div>
+      <div class="row small-row">
+        <button class="mbtn ghost tiny" id="btn-fs">⛶ Pantalla completa</button>
+        <button class="mbtn ghost tiny" id="btn-sound">🔊 Sonido</button>
+      </div>
+    </section>
+
+    <section id="scr-cc" class="screen hidden">
+      <h2>Dificultad</h2>
+      <div class="col">
+        <button class="mbtn" data-cc="0">🟢 Fácil <small>(50cc)</small></button>
+        <button class="mbtn primary" data-cc="1">🟡 Normal <small>(100cc)</small></button>
+        <button class="mbtn" data-cc="2">🔴 Difícil <small>(150cc)</small></button>
+      </div>
+      <button class="mbtn ghost back" data-back>← Volver</button>
+    </section>
+
+    <section id="scr-char" class="screen hidden screen-side">
+      <div class="side">
+        <h2>Elegí tu piloto</h2>
+        <div id="chargrid"></div>
+        <div id="charstats"></div>
+        <div class="row">
+          <button class="mbtn ghost back" data-back>← Volver</button>
+          <button class="mbtn primary" id="btn-char-ok">Listo ▶</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="scr-track" class="screen hidden">
+      <h2>Elegí la pista</h2>
+      <div id="trackgrid"></div>
+      <button class="mbtn ghost back" data-back>← Volver</button>
+    </section>
+
+    <section id="scr-howto" class="screen hidden">
+      <h2>Controles</h2>
+      <div class="howto">
+        <div>
+          <h3>💻 PC</h3>
+          <p><kbd>↑</kbd>/<kbd>W</kbd> acelerar · <kbd>↓</kbd>/<kbd>S</kbd> frenar/reversa</p>
+          <p><kbd>←</kbd><kbd>→</kbd>/<kbd>A</kbd><kbd>D</kbd> girar</p>
+          <p><kbd>Espacio</kbd>/<kbd>Shift</kbd> saltar y derrapar</p>
+          <p><kbd>E</kbd>/<kbd>Z</kbd>/<kbd>Ctrl</kbd> usar ítem · <kbd>Esc</kbd>/<kbd>P</kbd> pausa</p>
+          <p>🎮 También funciona con joystick (RT acelera, RB derrapa, LB/A ítem)</p>
+        </div>
+        <div>
+          <h3>📱 Celular</h3>
+          <p>Aceleración automática (se puede desactivar en pausa).</p>
+          <p>Arrastrá el dedo en la zona izquierda para girar.</p>
+          <p>Mantené <b>DERRAPE</b> mientras girás para cargar el turbo: chispas <span style="color:#4fc3ff">azules</span> → <span style="color:#ff9d2e">naranjas</span> → <span style="color:#d36bff">violetas</span>. ¡Soltá para salir disparado!</p>
+          <p>Tocá <b>ÍTEM</b> para usar lo que tengas.</p>
+        </div>
+        <div>
+          <h3>🎁 Ítems</h3>
+          <p>⚡ Turbo · ⚡³ Triple turbo · 🛢️ Aceite · 🎯 Misil teledirigido · 💣 Bomba · 🛡️ Escudo · 🌈 Súper modo · 🌩️ Tormenta (achica a los rivales)</p>
+          <p>Acelerá justo cuando aparece el <b>1</b> de la cuenta regresiva para un arranque turbo.</p>
+        </div>
+      </div>
+      <button class="mbtn ghost back" data-back>← Volver</button>
+    </section>
+
+    <section id="scr-pause" class="screen hidden">
+      <h2>Pausa</h2>
+      <div class="col">
+        <button class="mbtn primary" id="btn-resume">▶ Continuar</button>
+        <button class="mbtn" id="btn-restart">↻ Reiniciar carrera</button>
+        <button class="mbtn" id="btn-autoaccel">Aceleración automática: SÍ</button>
+        <button class="mbtn" id="btn-sound2">🔊 Sonido</button>
+        <button class="mbtn ghost" id="btn-quit">✕ Salir al menú</button>
+      </div>
+    </section>
+
+    <section id="scr-results" class="screen hidden">
+      <h2 id="res-title">Resultados</h2>
+      <table id="res-table"></table>
+      <div class="row">
+        <button class="mbtn primary" id="btn-res-next">Siguiente ▶</button>
+        <button class="mbtn ghost" id="btn-res-menu">Menú</button>
+      </div>
+    </section>
+  </div>
+
+  <div id="rotate-hint" class="hidden">📱↻ Girá el celular para jugar mejor <button id="rotate-ok">OK</button></div>
+  <div id="loading">Cargando…</div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
