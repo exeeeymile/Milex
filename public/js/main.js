@@ -4,6 +4,7 @@ import { World } from './world.js';
 import { Player, RemotePlayer } from './player.js';
 import { Effects } from './effects.js';
 import { Net } from './net.js';
+import { PeerNet } from './peernet.js';
 import { sfx, unlockAudio, startMusic, toggleMusic } from './audio.js';
 
 const $ = (id) => document.getElementById(id);
@@ -135,7 +136,18 @@ function padButton(p, i) {
 
 // ---------------------------------------------------------------- estado global
 
-const net = new Net();
+// Con el servidor Node (npm start) las salas pasan por WebSocket; en un hosting estático
+// (Vercel) las dos compus se conectan directo por WebRTC.
+let net = new PeerNet();
+fetch('/health')
+  .then((r) => (r.ok ? r.text() : ''))
+  .then((t) => {
+    if (t.trim() !== 'ok') return;
+    const ws = new Net();
+    ws.handlers = net.handlers;
+    net = ws;
+  })
+  .catch(() => {});
 let game = null;
 let myName = localStorage.getItem('milex-name') || '';
 let lobby = null;
@@ -828,4 +840,4 @@ const menuWorld = { t: 0 };
 requestAnimationFrame(frame);
 
 // acceso para pruebas automáticas desde la consola
-window.__milex = { get game() { return game; }, net };
+window.__milex = { get game() { return game; }, get net() { return net; } };
