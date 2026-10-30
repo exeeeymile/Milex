@@ -54,6 +54,7 @@
       <p class="tag">Derrapá, juntá ítems y llegá primero</p>
       <div class="col">
         <button class="mbtn primary" data-go="grandprix">🏆 Gran Premio</button>
+        <button class="mbtn" data-go="online">🌐 Online con amigos</button>
         <button class="mbtn" data-go="single">🏁 Carrera libre</button>
         <button class="mbtn" data-go="timetrial">⏱️ Contrarreloj</button>
         <button class="mbtn ghost" data-go="howto">🎮 Controles</button>
@@ -128,6 +129,46 @@
         <button class="mbtn" id="btn-sound2">🔊 Sonido</button>
         <button class="mbtn ghost" id="btn-quit">✕ Salir al menú</button>
       </div>
+    </section>
+
+    <section id="scr-online" class="screen hidden">
+      <h2>🌐 Online con amigos</h2>
+      <p class="tag">Hasta 4 personas. Los lugares libres los ocupan rivales de la computadora.</p>
+      <label class="field">Tu nombre
+        <input id="net-name" maxlength="12" autocomplete="nickname" placeholder="Jugador" />
+      </label>
+      <div class="col">
+        <button class="mbtn primary" id="btn-net-create">➕ Crear sala</button>
+        <div class="joinrow">
+          <input id="net-code" maxlength="4" placeholder="CÓDIGO" autocapitalize="characters" autocomplete="off" spellcheck="false" aria-label="Código de sala" />
+          <button class="mbtn" id="btn-net-join">Unirme</button>
+        </div>
+      </div>
+      <p id="net-status" class="status" role="status"></p>
+      <button class="mbtn ghost back" data-back>← Volver</button>
+    </section>
+
+    <section id="scr-lobby" class="screen hidden">
+      <h2>Sala <span id="lobby-code" class="code"></span></h2>
+      <p class="tag">Pasale este código a tus amigos para que se unan</p>
+      <ul id="lobby-players"></ul>
+      <div id="lobby-host">
+        <div class="row sel">
+          <button class="mbtn tiny" id="lobby-track-prev" aria-label="Pista anterior">◀</button>
+          <b id="lobby-track"></b>
+          <button class="mbtn tiny" id="lobby-track-next" aria-label="Pista siguiente">▶</button>
+        </div>
+        <div class="row sel"><button class="mbtn tiny" id="lobby-cc"></button></div>
+        <button class="mbtn primary" id="btn-lobby-start">🏁 ¡Empezar carrera!</button>
+      </div>
+      <p id="lobby-wait" class="status"></p>
+      <button class="mbtn ghost back" id="btn-lobby-leave">✕ Salir de la sala</button>
+    </section>
+
+    <section id="scr-msg" class="screen hidden">
+      <h2>Aviso</h2>
+      <p id="msg-text" class="tag"></p>
+      <button class="mbtn primary" id="btn-msg-ok">OK</button>
     </section>
 
     <section id="scr-results" class="screen hidden">

@@ -204,6 +204,25 @@ kbd { background: #fff; color: #111; border-radius: 4px; padding: 0 5px; font-si
 #rotate-hint button { margin-left: 8px; font: inherit; padding: 2px 10px; border-radius: 8px; border: 0; background: var(--accent); }
 #loading { position: fixed; inset: 0; display: grid; place-items: center; font-size: 28px; font-weight: 900; background: var(--bg); z-index: 10; }
 
+/* ---------- Online ---------- */
+input { font: inherit; user-select: text; -webkit-user-select: text; touch-action: manipulation; }
+.field { display: flex; flex-direction: column; gap: 4px; font-weight: 800; margin-bottom: 12px; text-align: left; }
+.field input, .joinrow input {
+  padding: 10px 12px; border-radius: 12px; border: 3px solid rgba(255,255,255,.6);
+  background: rgba(0,0,0,.35); color: #fff; font-size: 18px; font-weight: 800;
+}
+.joinrow { display: flex; gap: 8px; }
+.joinrow input { flex: 1; min-width: 0; text-transform: uppercase; letter-spacing: 6px; text-align: center; }
+.status { min-height: 1.4em; margin-top: 10px; color: var(--accent); font-weight: 800; }
+.code { color: #fff; letter-spacing: 6px; background: rgba(0,0,0,.4); padding: 0 10px; border-radius: 10px; font-style: normal; }
+#lobby-players { list-style: none; display: grid; gap: 6px; margin: 4px 0 10px; min-width: min(320px, 80vw); }
+#lobby-players li { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 10px; background: rgba(255,255,255,.08); font-weight: 800; text-align: left; }
+#lobby-players li small { margin-left: auto; color: var(--muted); }
+.row.sel { align-items: center; margin-top: 6px; }
+.row.sel b { min-width: 150px; }
+#btn-lobby-start { margin-top: 12px; }
+.mbtn:disabled { opacity: .55; cursor: default; filter: none; }
+
 @media (max-height: 480px) {
   .screen { padding: 10px 14px; }
   .logo { font-size: 46px; }

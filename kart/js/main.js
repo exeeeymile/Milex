@@ -1,5 +1,6 @@
 // Milex Kart — carreras de karts 3D (Three.js). Jugable con teclado, táctil y joystick.
 import * as THREE from 'three';
+import { NetSession, randomCode, netErrorText } from './net.js';
 
 // ============================================================================
 // Utilidades
@@ -91,6 +92,7 @@ const ITEMS = {
   star: { icon: '🌈' },
   storm: { icon: '🌩️' },
 };
+const ITEM_KEYS = Object.keys(ITEMS);
 const ITEM_TABLES = [
   { oil: 34, bomb: 18, shield: 26, turbo: 16, missile: 6 },                                  // adelante
   { turbo: 20, triple: 14, missile: 24, oil: 10, bomb: 16, shield: 10, star: 6 },           // mitad
@@ -108,6 +110,8 @@ const HALF = ROAD_W / 2;
 const CURB = 1.6;
 const WALL = HALF + 7.5;
 const TRACK_SCALE = 1.3;
+const newAI = (skill = 1) => ({ lane: rand(-4.5, 4.5), phase: rand(0, 10), hold: 0, stuck: 0, skill });
+const r2 = (v) => Math.round(v * 100) / 100;
 
 // ============================================================================
 // Audio (Web Audio, todo sintetizado)
@@ -917,7 +921,13 @@ class Kart {
     const m = makeKart(ch);
     Object.assign(this, { mesh: m.group, parts: m });
     this.input = { accel: false, brake: false, steer: 0, drift: false, item: false };
-    this.ai = isPlayer ? null : { lane: rand(-4, 4), phase: rand(0, 10), hold: 0, stuck: 0, skill: 1 };
+    this.ai = isPlayer ? null : newAI();
+    this.remote = false;   // controlado por la red (posición recibida)
+    this.netSend = null;   // en el anfitrión: envía mensajes al dueño de este kart
+    this.human = isPlayer;
+    this.owner = null;
+    this.displayName = '';
+    this.tag = null;
   }
   reset(track, s, lat, cc) {
     this.track = track;
@@ -935,6 +945,7 @@ class Kart {
     this.item = null; this.itemCount = 0; this.rollT = 0; this.rollItem = null;
     this.offroad = false; this.wrongT = 0; this.lapStart = 0; this.lapTimes = [];
     this.rocket = 0; this.firstAccelT = -1;
+    this.net = null; this.netInit = false; this.useSentT = 0;
     const st = this.ch;
     this.maxSpeed = (34.5 + st.speed * 1.1) * CC[cc].mul;
     this.accelRate = (11 + st.accel * 3.2) * CC[cc].mul;
@@ -952,9 +963,19 @@ class Kart {
     this.boostT = Math.max(this.boostT, t);
     if (this.isPlayer) audio.play('boost');
   }
-  hit(kind = 'spin') {
-    if (this.starT > 0) return false;
+  hit(kind = 'spin', shrink = 0) {
+    if (this.remote) {
+      // el anfitrión avisa al dueño del kart; los invitados nunca deciden golpes ajenos
+      if (this.netSend && this.starT <= 0 && this.spinT <= 0.3) {
+        this.netSend({ t: 'hit', kind, shrink });
+        this.spinT = 1;
+        return true;
+      }
+      return false;
+    }
+    if (this.starT > 0 || this.spinT > 0.3) return false;
     if (this.shieldT > 0) { this.shieldT = 0; if (this.isPlayer) audio.play('shield'); return false; }
+    if (shrink) this.shrinkT = shrink;
     this.spinT = kind === 'boom' ? 1.6 : 1.15;
     this.speed *= 0.3;
     this.drift = 0; this.driftT = 0; this.driftLvl = 0;
@@ -965,6 +986,7 @@ class Kart {
     return true;
   }
   update(dt, race) {
+    if (this.remote) { this.updateRemote(dt); return; }
     const inp = this.input;
     const control = race.phase === 'race' && this.spinT <= 0;
     // temporizadores
@@ -1069,6 +1091,43 @@ class Kart {
     // efectos
     this.updateFx(dt);
   }
+  updateRemote(dt) {
+    this.boostT = Math.max(0, this.boostT - dt);
+    this.starT = Math.max(0, this.starT - dt);
+    this.shrinkT = Math.max(0, this.shrinkT - dt);
+    this.shieldT = Math.max(0, this.shieldT - dt);
+    if (this.spinT > 0) { this.spinT -= dt; this.spinAng += dt * 14; } else this.spinAng = 0;
+    const n = this.net;
+    if (n) {
+      // extrapolación corta + suavizado para que se vea fluido entre paquetes
+      const age = Math.min((performance.now() - n.t) / 1000, 0.25);
+      const tx = n.x + Math.sin(n.h) * n.speed * age, tz = n.z + Math.cos(n.h) * n.speed * age;
+      const f = 1 - Math.exp(-14 * dt);
+      if (Math.hypot(tx - this.x, tz - this.z) > 25) { this.x = tx; this.z = tz; this.h = n.h; }
+      else { this.x = lerp(this.x, tx, f); this.z = lerp(this.z, tz, f); }
+      this.y = lerp(this.y, n.y, f);
+      this.h += angDiff(this.h, n.h) * f;
+      this.speed = n.speed;
+    }
+    const loc = this.track.locate(this.x, this.z, this.idx, _loc);
+    this.idx = loc.idx; this.lat = loc.lat;
+    this.offroad = Math.abs(loc.lat) > HALF + CURB && this.y < 0.2;
+    this.updateFx(dt);
+  }
+  netState() {
+    return [r2(this.x), r2(this.z), r2(this.y), r2(this.h), r2(this.speed), this.drift, this.driftLvl,
+      r2(this.boostT), r2(this.starT), r2(this.shrinkT), r2(this.shieldT), r2(this.spinT),
+      this.lap, r2(this.progress), this.finished ? 1 : 0, isFinite(this.finishTime) ? r2(this.finishTime) : -1,
+      this.place, ITEM_KEYS.indexOf(this.item), this.itemCount, r2(this.rollT), r2(this.input.steer), r2(this.s)];
+  }
+  applyNet(a) {
+    this.net = { x: a[0], z: a[1], y: a[2], h: a[3], speed: a[4], t: performance.now() };
+    if (!this.netInit) { this.x = a[0]; this.z = a[1]; this.h = a[3]; this.netInit = true; }
+    this.drift = a[5]; this.driftLvl = a[6]; this.boostT = a[7]; this.starT = a[8]; this.shrinkT = a[9]; this.shieldT = a[10];
+    this.spinT = a[11];
+    this.lap = a[12]; this.progress = a[13]; this.finished = !!a[14]; this.finishTime = a[15] < 0 ? Infinity : a[15];
+    this.input.steer = a[20]; this.s = a[21];
+  }
   updateFx(dt) {
     const m = this.mesh, p = this.parts;
     m.position.set(this.x, this.y, this.z);
@@ -1164,6 +1223,7 @@ const KEYS = {
 const keyState = {};
 window.addEventListener('keydown', (e) => {
   audio.unlock();
+  if (e.target && e.target.tagName === 'INPUT') return;
   if (e.code === 'Escape' || e.code === 'KeyP') { togglePause(); return; }
   const k = KEYS[e.code];
   if (!k) return;
@@ -1230,6 +1290,7 @@ function pollInput() {
   if (autoAccel && !brake) accel = true;
   input.steer = clamp(steer, -1, 1);
   input.accel = accel; input.brake = brake; input.drift = drift;
+  if (state === 'paused') { input.steer = 0; input.accel = input.brake = input.drift = false; input.itemQueued = false; }
 }
 
 // ============================================================================
@@ -1255,6 +1316,8 @@ class Race {
     this.camYaw = 0;
     this.camPos = new THREE.Vector3();
     this.snow = null;
+    this.net = null;      // { role: 'host' | 'guest', session } en el modo online
+    this.nextId = 1;
   }
   isNear(k) { return this.player && Math.hypot(k.x - this.player.x, k.z - this.player.z) < 40; }
   loadTrack(i) {
@@ -1284,7 +1347,8 @@ class Race {
     this.boxes = []; this.pads = []; this.hazards = []; this.projectiles = [];
     sparks.clear(); dust.clear();
   }
-  setup(trackIdx) {
+  // online = { roster: [{ ci, owner, name }], pads: [lat x3], myIndex } en partidas online
+  setup(trackIdx, online = null) {
     this.clearObjects();
     this.loadTrack(trackIdx);
     const tr = this.track, L = tr.length;
@@ -1301,8 +1365,8 @@ class Race {
       }
     }
     // Turbos en el piso
-    for (const f of [0.28, 0.57, 0.83]) {
-      const lat = rand(-4, 4);
+    [0.28, 0.57, 0.83].forEach((f, pi) => {
+      const lat = online ? online.pads[pi] : rand(-4, 4);
       const loc = tr.locate(...(() => { const p = tr.pointAt(L * f, lat); return [p.x, p.z]; })());
       const tex = BOOST_TEX.clone(); tex.needsUpdate = true; tex.repeat.set(1, 1.5);
       const mesh = new THREE.Mesh(new THREE.PlaneGeometry(4, 6), new THREE.MeshBasicMaterial({ map: tex }));
@@ -1311,17 +1375,28 @@ class Race {
       mesh.position.set(p.x, 0.05, p.z);
       scene.add(mesh);
       this.pads.push({ idx: loc.idx, lat, mesh, tex });
-    }
+    });
     // Karts
     const chars = CHARACTERS.map((c, i) => i).filter((i) => i !== this.playerChar);
     chars.sort(() => Math.random() - 0.5);
-    const order = this.mode === 'timetrial' ? [this.playerChar] : [...chars.slice(0, 7), this.playerChar];
-    if (this.gp && this.gp.order) {
+    const order = online ? online.roster.map((r) => r.ci) : this.mode === 'timetrial' ? [this.playerChar] : [...chars.slice(0, 7), this.playerChar];
+    if (!online && this.gp && this.gp.order) {
       // en el GP la grilla sigue el orden inverso de la clasificación
       order.length = 0; order.push(...this.gp.order);
     }
-    this.karts = order.map((ci) => {
-      const k = this.kartCache[ci] && this.kartCache[ci].isPlayer === (ci === this.playerChar) ? this.kartCache[ci] : (this.kartCache[ci] = new Kart(CHARACTERS[ci], ci === this.playerChar));
+    const guest = online && this.net.role === 'guest';
+    this.karts = order.map((ci, i) => {
+      const k = this.kartCache[ci] || (this.kartCache[ci] = new Kart(CHARACTERS[ci], false));
+      const r = online ? online.roster[i] : null;
+      k.isPlayer = online ? i === online.myIndex : ci === this.playerChar;
+      k.owner = r ? r.owner : null;
+      k.human = online ? r.owner != null : k.isPlayer;
+      k.displayName = r && r.owner != null ? r.name : '';
+      k.remote = online ? (guest ? !k.isPlayer : r.owner != null && r.owner !== 'host') : false;
+      k.netSend = k.remote && !guest ? (m) => this.net.session.send(r.owner, m) : null;
+      k.ai = !k.isPlayer && !k.remote ? newAI() : null;
+      if (k.tag) { k.mesh.remove(k.tag); k.tag = null; }
+      if (online && k.human && !k.isPlayer) { k.tag = makeTag(k.displayName); k.mesh.add(k.tag); }
       return k;
     });
     this.karts.forEach((k, i) => {
@@ -1339,6 +1414,7 @@ class Race {
     this.player = this.karts.find((k) => k.isPlayer);
     if (this.mode === 'timetrial') { this.player.item = 'triple'; this.player.itemCount = 3; }
     this.finishOrder = [];
+    this.nextId = 1;
     this.time = 0; this.t = 0;
     this.phase = 'intro';
     this.camYaw = this.player.h;
@@ -1380,11 +1456,11 @@ class Race {
   playerFinished() {
     this.phase = 'finished';
     this.finishT = 0;
-    const place = this.finishOrder.length;
+    const place = 1 + this.karts.filter((o) => o !== this.player && o.finished && o.finishTime <= this.time).length;
     if (this.mode === 'timetrial') this.saveRecord('total', this.time);
     showCenter(this.mode === 'timetrial' ? '¡META!' : `¡META! ${place}°`, 'small', 3);
     audio.play('finish');
-    this.player.ai = { lane: 0, phase: 0, hold: 99, stuck: 0, skill: 0.9 };
+    this.player.ai = { lane: 0, phase: 0, hold: 0, stuck: 0, skill: 0.9 };
   }
   rollItem(k) {
     const n = this.karts.length;
@@ -1398,19 +1474,24 @@ class Race {
   useItem(k) {
     const it = k.item;
     if (!it || k.rollT > 0) return;
+    if (this.net && this.net.role === 'guest') {
+      // el invitado le pide al anfitrión que use su ítem (el anfitrión es el que manda)
+      if (k.isPlayer && performance.now() - k.useSentT > 350) { k.useSentT = performance.now(); this.net.session.send('host', { t: 'use' }); }
+      return;
+    }
     const fx = k.forwardX, fz = k.forwardZ;
     const near = k.isPlayer || this.isNear(k);
     switch (it) {
-      case 'turbo': k.boost(1.1); break;
-      case 'triple': k.boost(1.1); k.itemCount--; if (k.itemCount > 0) return; break;
-      case 'shield': k.shieldT = 10; if (near) audio.play('shield'); break;
-      case 'star': k.starT = 7.5; k.boost(0.6); if (near) audio.play('star'); break;
+      case 'turbo': this.fx(k, { boost: 1.1 }); break;
+      case 'triple': this.fx(k, { boost: 1.1 }); k.itemCount--; if (k.itemCount > 0) return; break;
+      case 'shield': this.fx(k, { shieldT: 10 }); if (near) audio.play('shield'); break;
+      case 'star': this.fx(k, { starT: 7.5, boost: 0.6 }); if (near) audio.play('star'); break;
       case 'oil': {
         const mesh = makeOil();
         const x = k.x - fx * 3.2, z = k.z - fz * 3.2;
         mesh.position.x = x; mesh.position.z = z;
         scene.add(mesh);
-        this.hazards.push({ type: 'oil', x, z, mesh, owner: k, grace: 0.6 });
+        this.hazards.push({ id: this.nextId++, type: 'oil', x, z, mesh, owner: k, grace: 0.6 });
         if (this.hazards.length > 24) { const o = this.hazards.shift(); scene.remove(o.mesh); }
         if (near) audio.play('drop');
         break;
@@ -1419,14 +1500,14 @@ class Race {
         const mesh = missileGeo.clone();
         scene.add(mesh);
         const ahead = this.karts.filter((o) => o !== k && !o.finished && o.progress > k.progress).sort((a, b) => a.progress - b.progress)[0] || null;
-        this.projectiles.push({ type: 'missile', x: k.x + fx * 2.5, z: k.z + fz * 2.5, y: 1, h: k.h, s: k.s, lat: k.lat, prog: k.progress, target: ahead, owner: k, life: 9, mesh, speed: Math.max(62, k.speed + 18), grace: 0.4 });
+        this.projectiles.push({ id: this.nextId++, type: 'missile', x: k.x + fx * 2.5, z: k.z + fz * 2.5, y: 1, h: k.h, s: k.s, lat: k.lat, prog: k.progress, target: ahead, owner: k, life: 9, mesh, speed: Math.max(62, k.speed + 18), grace: 0.4 });
         if (near) audio.play('shoot');
         break;
       }
       case 'bomb': {
         const mesh = makeBomb();
         scene.add(mesh);
-        this.projectiles.push({ type: 'bomb', x: k.x + fx * 2.5, z: k.z + fz * 2.5, y: 1.5, vx: fx * (k.speed + 22), vz: fz * (k.speed + 22), vy: 9, fuse: 3.2, owner: k, mesh, grace: 0.5, idx: k.idx });
+        this.projectiles.push({ id: this.nextId++, type: 'bomb', x: k.x + fx * 2.5, z: k.z + fz * 2.5, y: 1.5, vx: fx * (k.speed + 22), vz: fz * (k.speed + 22), vy: 9, fuse: 3.2, owner: k, mesh, grace: 0.5, idx: k.idx });
         if (near) audio.play('drop');
         break;
       }
@@ -1434,16 +1515,31 @@ class Race {
         for (const o of this.karts) {
           if (o === k || o.finished) continue;
           if (o.progress > k.progress || this.karts.length < 3) {
-            if (o.hit('spin')) o.shrinkT = 5;
+            o.hit('spin', 5);
           }
         }
         audio.play('storm');
         flash();
+        this.netEvent({ e: 'storm' });
         break;
       }
       default: break;
     }
     k.item = null; k.itemCount = 0;
+  }
+  fx(k, o) {
+    if (k.remote) {
+      k.netSend?.({ t: 'fx', ...o });
+      if (o.shieldT) k.shieldT = o.shieldT;
+      if (o.starT) k.starT = o.starT;
+      return;
+    }
+    if (o.boost) k.boost(o.boost);
+    if (o.shieldT) k.shieldT = o.shieldT;
+    if (o.starT) k.starT = o.starT;
+  }
+  netEvent(m) {
+    if (this.net && this.net.role === 'host') this.net.session.broadcast({ t: 'ev', ...m });
   }
   update(dt) {
     this.t += dt;
@@ -1459,7 +1555,7 @@ class Race {
           for (const k of this.karts) {
             k.lapStart = 0;
             if (k.isPlayer) { if (k.firstAccelT >= 1.9 && k.firstAccelT <= 2.7) k.boost(1.2); }
-            else if (Math.random() < k.ai.skill - 0.55) k.boost(rand(0.6, 1.1));
+            else if (k.ai && Math.random() < k.ai.skill - 0.55) k.boost(rand(0.6, 1.1));
           }
         }
       }
@@ -1477,13 +1573,14 @@ class Race {
     this.collideKarts();
     this.updateBoxes(dt);
     this.updatePads(dt);
-    this.updateHazards(dt);
-    this.updateProjectiles(dt);
+    const guest = this.net && this.net.role === 'guest';
+    if (guest) this.updateNetObjects(dt);
+    else { this.updateHazards(dt); this.updateProjectiles(dt); }
     // posiciones
     const sorted = [...this.karts].sort((a, b) => (a.finished || b.finished) ? (a.finishTime - b.finishTime) : (b.progress - a.progress));
     sorted.forEach((k, i) => { k.place = i + 1; });
-    // rodillos de ítems
-    for (const k of this.karts) {
+    // rodillos de ítems (los decide el anfitrión)
+    if (!guest) for (const k of this.karts) {
       if (k.rollT > 0) {
         k.rollT -= dt;
         if (k.isPlayer && Math.random() < 0.5) audio.play('tick');
@@ -1536,7 +1633,8 @@ class Race {
     inp.accel = true;
     inp.brake = Math.abs(d) > 1.3 && k.speed > 18;
     // goma elástica
-    const P = this.player;
+    let P = this.player;
+    if (this.net) for (const o of this.karts) if (o.human && !o.finished && (P.finished || o.progress > P.progress)) P = o;
     let rub = 1;
     if (P && !P.finished && this.mode !== 'timetrial') {
       const diff = k.progress - P.progress;
@@ -1566,6 +1664,8 @@ class Race {
     const ks = this.karts;
     for (let i = 0; i < ks.length; i++) for (let j = i + 1; j < ks.length; j++) {
       const a = ks[i], b = ks[j];
+      const am = !a.remote, bm = !b.remote;
+      if (!am && !bm && this.net && this.net.role === 'guest') continue;
       const dx = b.x - a.x, dz = b.z - a.z;
       const r = 1.15 * (a.shrinkT > 0 ? 0.6 : 1) + 1.15 * (b.shrinkT > 0 ? 0.6 : 1);
       const d2 = dx * dx + dz * dz;
@@ -1573,7 +1673,9 @@ class Race {
       const d = Math.sqrt(d2), nx = dx / d, nz = dz / d, pen = r - d;
       const ma = a.mass * (a.shrinkT > 0 ? 0.3 : 1) * (a.starT > 0 ? 10 : 1);
       const mb = b.mass * (b.shrinkT > 0 ? 0.3 : 1) * (b.starT > 0 ? 10 : 1);
-      const ta = mb / (ma + mb), tb = ma / (ma + mb);
+      let ta = mb / (ma + mb), tb = ma / (ma + mb);
+      // los karts controlados por la red no se empujan acá: se empuja solo el local
+      if (!am) { ta = 0; tb = bm ? 1 : 0; } else if (!bm) { tb = 0; ta = 1; }
       a.x -= nx * pen * ta * 1.2; a.z -= nz * pen * ta * 1.2;
       b.x += nx * pen * tb * 1.2; b.z += nz * pen * tb * 1.2;
       if (a.starT > 0 && b.starT <= 0) b.hit('spin');
@@ -1583,7 +1685,18 @@ class Race {
       else if ((a.isPlayer || b.isPlayer) && pen > 0.3) audio.play('bump');
     }
   }
+  boxBurst(b) {
+    for (let i = 0; i < 12; i++) sparks.emit(b.x, 1.3, b.z, rand(-6, 6), rand(2, 8), rand(-6, 6), [0xff5252, 0xffd740, 0x69f0ae, 0x40c4ff][i % 4], 0.5, 10);
+  }
   updateBoxes(dt) {
+    if (this.net && this.net.role === 'guest') {
+      for (const b of this.boxes) {
+        b.rot += dt * 1.5;
+        b.mesh.rotation.set(b.rot * 0.7, b.rot, 0);
+        b.mesh.position.y = 1.3 + Math.sin(b.rot * 2) * 0.2;
+      }
+      return;
+    }
     for (const b of this.boxes) {
       b.rot += dt * 1.5;
       if (b.respawn > 0) {
@@ -1599,7 +1712,7 @@ class Race {
         const dx = k.x - b.x, dz = k.z - b.z;
         if (dx * dx + dz * dz < 4.8 && k.y < 2.5) {
           b.respawn = 2.5; b.mesh.visible = false;
-          for (let i = 0; i < 12; i++) sparks.emit(b.x, 1.3, b.z, rand(-6, 6), rand(2, 8), rand(-6, 6), [0xff5252, 0xffd740, 0x69f0ae, 0x40c4ff][i % 4], 0.5, 10);
+          this.boxBurst(b);
           if (k.isPlayer || this.isNear(k)) audio.play('box');
           if (!k.item && k.rollT <= 0) {
             k.rollItem = this.rollItem(k);
@@ -1615,6 +1728,7 @@ class Race {
     for (const p of this.pads) {
       p.tex.offset.y -= dt * 1.5;
       for (const k of this.karts) {
+        if (k.remote) continue;
         const di = Math.abs(((k.idx - p.idx) % this.track.N + this.track.N + this.track.N / 2) % this.track.N - this.track.N / 2);
         if (di <= 2 && Math.abs(k.lat - p.lat) < 2.3 && k.y < 0.5 && k.boostT < 0.5) k.boost(0.9);
       }
@@ -1635,16 +1749,20 @@ class Race {
       }
     }
   }
-  explode(x, z, owner) {
+  explode(x, z) {
+    this.explodeFx(x, z);
+    for (const k of this.karts) {
+      const d = Math.hypot(k.x - x, k.z - z);
+      if (d < 8) k.hit('boom');
+    }
+    this.netEvent({ e: 'boom', x: r2(x), z: r2(z) });
+  }
+  explodeFx(x, z) {
     for (let i = 0; i < 60; i++) {
       const c = [0xff5722, 0xffc107, 0xffeb3b, 0xffffff][i % 4];
       sparks.emit(x, 1.5, z, rand(-14, 14), rand(4, 16), rand(-14, 14), c, rand(0.4, 0.9), 14);
     }
     for (let i = 0; i < 20; i++) dust.emit(x + rand(-2, 2), 1, z + rand(-2, 2), rand(-4, 4), rand(2, 7), rand(-4, 4), 0x555555, 1.2, 1);
-    for (const k of this.karts) {
-      const d = Math.hypot(k.x - x, k.z - z);
-      if (d < 8) k.hit('boom');
-    }
     const pd = this.player ? Math.hypot(this.player.x - x, this.player.z - z) : 0;
     if (pd < 80) { audio.play('boom'); if (pd < 25) shake = 0.6; }
   }
@@ -1699,7 +1817,7 @@ class Race {
         if (Math.random() < 0.5) sparks.emit(p.x, p.y + 1.2, p.z, rand(-1, 1), 2, rand(-1, 1), 0xffc107, 0.3);
         let trig = p.fuse <= 0;
         if (p.grace <= 0) for (const k of this.karts) if (Math.hypot(k.x - p.x, k.z - p.z) < 3) trig = true;
-        if (trig) { this.explode(p.x, p.z, p.owner); dead = true; }
+        if (trig) { this.explode(p.x, p.z); dead = true; }
       }
       if (dead) { scene.remove(p.mesh); this.projectiles.splice(i, 1); }
     }
@@ -1707,6 +1825,17 @@ class Race {
   explodeSmall(x, z) {
     for (let i = 0; i < 30; i++) sparks.emit(x, 1.2, z, rand(-9, 9), rand(3, 10), rand(-9, 9), i % 2 ? 0xff7043 : 0xffeb3b, 0.6, 14);
     if (this.player && Math.hypot(this.player.x - x, this.player.z - z) < 60) audio.play('boom');
+    this.netEvent({ e: 'pop', x: r2(x), z: r2(z) });
+  }
+  // Invitado: mueve suavemente los proyectiles recibidos del anfitrión
+  updateNetObjects(dt) {
+    const f = 1 - Math.exp(-18 * dt);
+    for (const p of this.projectiles) {
+      p.x = lerp(p.x, p.tx, f); p.y = lerp(p.y, p.ty, f); p.z = lerp(p.z, p.tz, f);
+      p.mesh.position.set(p.x, p.y, p.z);
+      if (p.type === 'missile') p.mesh.rotation.y = p.h;
+      else { p.mesh.rotation.y += dt * 3; if (Math.random() < 0.5) sparks.emit(p.x, p.y + 1.2, p.z, rand(-1, 1), 2, rand(-1, 1), 0xffc107, 0.3); }
+    }
   }
   showResults() {
     this.resultsShown = true;
@@ -1723,7 +1852,14 @@ class Race {
     const tbl = $('res-table');
     tbl.innerHTML = '';
     let next = 'Menú';
-    if (this.gp) {
+    $('btn-res-next').disabled = false;
+    if (this.net) {
+      $('res-title').textContent = `Online — ${this.track.def.name}`;
+      order.forEach((k, i) => addRow(tbl, i + 1, k, fmtTime(k.finishTime), k.human ? '👤' : '', ''));
+      const host = this.net.role === 'host';
+      next = host ? 'Volver a la sala ▶' : 'Esperando al anfitrión…';
+      $('btn-res-next').disabled = !host;
+    } else if (this.gp) {
       order.forEach((k, i) => { this.gp.points[k.ch.id] = (this.gp.points[k.ch.id] || 0) + GP_POINTS[i]; });
       const last = this.gp.race >= TRACKS.length - 1;
       $('res-title').textContent = `Carrera ${this.gp.race + 1}/${TRACKS.length} — ${this.track.def.name}`;
@@ -1753,8 +1889,23 @@ function addRow(tbl, pos, k, a, b, c) {
   const tr = document.createElement('tr');
   if (k.isPlayer) tr.className = 'me';
   const col = '#' + new THREE.Color(k.ch.color).getHexString();
-  tr.innerHTML = `<td class="n">${pos}</td><td><span class="dot" style="background:${col}"></span>${k.ch.icon} ${k.ch.name}</td><td class="n">${a}</td><td class="n">${b}</td><td class="n">${c}</td>`;
+  tr.innerHTML = `<td class="n">${pos}</td><td><span class="dot" style="background:${col}"></span>${k.ch.icon} ${k.displayName ? escapeHtml(k.displayName) + ' · ' : ''}${k.ch.name}</td><td class="n">${a}</td><td class="n">${b}</td><td class="n">${c}</td>`;
   tbl.appendChild(tr);
+}
+
+function escapeHtml(t) {
+  return String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function makeTag(text) {
+  const tex = canvasTex(256, 64, (g, w, h) => {
+    g.font = '900 38px Trebuchet MS, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.lineWidth = 8; g.strokeStyle = '#000'; g.strokeText(text, w / 2, h / 2);
+    g.fillStyle = '#ffeb3b'; g.fillText(text, w / 2, h / 2);
+  }, false);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+  sp.scale.set(4, 1, 1);
+  sp.position.y = 3.6;
+  return sp;
 }
 
 function makeSnow() {
@@ -1955,6 +2106,7 @@ document.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click'
   const go = b.dataset.go;
   if (go === 'howto') return ui.show('howto');
   menuFlow.mode = go;
+  if (go === 'online') { ui.show('char'); buildCharGrid(); return; }
   if (go === 'timetrial') { menuFlow.cc = 2; ui.show('char'); buildCharGrid(); }
   else ui.show('cc');
 }));
@@ -1985,6 +2137,7 @@ $('rotate-ok').addEventListener('click', () => { rotateDismissed = true; resize(
 $('btn-res-menu').addEventListener('click', () => toMenu());
 $('btn-res-next').addEventListener('click', () => {
   audio.play('click');
+  if (race.net) { if (race.net.role === 'host') online.backToLobby(); return; }
   if (race.mode === 'gpdone') return toMenu();
   if (race.gp) {
     if (race.gp.race >= TRACKS.length - 1) return showGPFinal();
@@ -2014,6 +2167,12 @@ $('btn-char-ok').addEventListener('click', () => {
   audio.play('click');
   store.set('char', selChar);
   race.playerChar = selChar;
+  if (menuFlow.mode === 'online') {
+    $('net-name').value = store.get('netname', '');
+    $('net-status').textContent = '';
+    ui.show('online');
+    return;
+  }
   if (menuFlow.mode === 'grandprix') {
     race.mode = 'grandprix'; race.cc = menuFlow.cc;
     race.gp = { race: 0, points: {}, order: null };
@@ -2060,6 +2219,7 @@ function drawTrackThumb(c, t) {
 function setPreview(i) {
   if (previewKart) scene.remove(previewKart.mesh);
   previewKart = race.kartCache[i] || (race.kartCache[i] = new Kart(CHARACTERS[i], false));
+  if (previewKart.tag) { previewKart.mesh.remove(previewKart.tag); previewKart.tag = null; }
   if (!race.track) race.loadTrack(0);
   previewKart.reset(race.track, 30, 0, 1);
   scene.add(previewKart.mesh);
@@ -2073,6 +2233,7 @@ function showroomOn() {
   audio.playSong(4);
 }
 function toMenu() {
+  online.close();
   state = 'menu';
   race.phase = 'menu'; race.gp = null;
   audio.engine(0, 1, false, false); audio.squeal(false);
@@ -2080,12 +2241,12 @@ function toMenu() {
   ui.show('title');
   showroomOn();
 }
-function startRace(i) {
+function startRace(i, onlineSetup = null) {
   if (previewKart) { scene.remove(previewKart.mesh); previewKart = null; }
   ui.hide();
   state = 'game';
   race.resultsShown = false;
-  race.setup(i);
+  race.setup(i, onlineSetup);
   $('hud').classList.remove('hidden');
   $('touch').classList.toggle('hidden', !IS_TOUCH);
   resize();
@@ -2093,6 +2254,7 @@ function startRace(i) {
 function togglePause() {
   if (state === 'game' && race.phase !== 'finished') {
     state = 'paused';
+    $('btn-restart').classList.toggle('hidden', !!race.net);
     ui.show('pause', true);
     audio.engine(0, 1, false, false); audio.squeal(false);
   } else if (state === 'paused') {
@@ -2121,6 +2283,297 @@ function showGPFinal() {
 }
 
 // ============================================================================
+// Online (salas con código, conexión directa entre jugadores)
+// ============================================================================
+const MAX_HUMANS = 4;
+const online = {
+  session: null,
+  players: [],      // [{ id, name, ci }] (lo mantiene el anfitrión)
+  track: 0,
+  cc: 1,
+  racing: false,
+  sendT: 0,
+  name() { return ($('net-name').value.trim() || 'Jugador').slice(0, 12); },
+  status(t) { $('net-status').textContent = t; },
+  busy(on) { $('btn-net-create').disabled = on; $('btn-net-join').disabled = on; },
+  async create() {
+    audio.unlock();
+    this.busy(true);
+    this.status('Creando sala…');
+    for (let tries = 0; tries < 3; tries++) {
+      const s = new NetSession();
+      try {
+        await s.host(randomCode());
+        this.begin(s);
+        this.players = [{ id: 'host', name: this.name(), ci: selChar }];
+        this.track = 0; this.cc = 1; this.racing = false;
+        this.showLobby();
+        this.busy(false);
+        return;
+      } catch (e) {
+        s.close();
+        if (e.type !== 'unavailable-id') { this.status(netErrorText(e)); break; }
+      }
+    }
+    this.busy(false);
+  },
+  async join() {
+    audio.unlock();
+    const code = $('net-code').value.trim().toUpperCase();
+    if (!/^[A-Z]{4}$/.test(code)) return this.status('El código tiene 4 letras.');
+    this.busy(true);
+    this.status('Conectando…');
+    const s = new NetSession();
+    try { await s.join(code); } catch (e) { s.close(); this.busy(false); return this.status(netErrorText(e)); }
+    this.busy(false);
+    this.begin(s);
+    this.players = [];
+    s.send('host', { t: 'hello', name: this.name(), ci: selChar });
+    this.showLobby();
+  },
+  begin(s) {
+    this.session = s;
+    race.net = { role: s.role, session: s };
+    store.set('netname', $('net-name').value.trim());
+    this.lastHeard = new Map([['host', performance.now()]]);
+    s.on('message', (id, m) => {
+      if (this.session !== s) return;
+      this.lastHeard.set(id, performance.now());
+      if (m && m.t !== 'ping') this.onMessage(id, m);
+    });
+    s.on('join', (id) => this.lastHeard.set(id, performance.now()));
+    s.on('leave', (id) => { if (this.session === s) this.onLeave(id); });
+    // latido: detecta desconexiones aunque el otro cierre la página sin avisar
+    clearInterval(this.hb);
+    this.hb = setInterval(() => {
+      if (this.session !== s) return;
+      s.broadcast({ t: 'ping' });
+      const now = performance.now();
+      if (s.role === 'guest') {
+        if (now - (this.lastHeard.get('host') || now) > 8000) this.onLeave('host');
+      } else {
+        for (const id of [...s.conns.keys()]) {
+          if (now - (this.lastHeard.get(id) || now) > 10000) { s.conns.get(id)?.close(); s.conns.delete(id); this.onLeave(id); }
+        }
+      }
+    }, 1000);
+  },
+  close() {
+    const s = this.session;
+    clearInterval(this.hb);
+    this.session = null;
+    race.net = null;
+    this.racing = false;
+    if (s) s.close();
+  },
+  isHost() { return this.session && this.session.role === 'host'; },
+  // ---- anfitrión ----
+  broadcastLobby() {
+    this.session.broadcast({ t: 'lobby', players: this.players, track: this.track, cc: this.cc, racing: this.racing });
+    this.renderLobby();
+  },
+  onMessage(id, m) {
+    if (!m || typeof m !== 'object') return;
+    if (this.isHost()) {
+      if (m.t === 'hello') {
+        if (this.players.some((p) => p.id === id)) return;
+        if (this.players.length >= MAX_HUMANS) { this.session.send(id, { t: 'full' }); return; }
+        const used = new Set(this.players.map((p) => p.ci));
+        let ci = Number.isInteger(m.ci) && m.ci >= 0 && m.ci < CHARACTERS.length ? m.ci : 0;
+        if (used.has(ci)) ci = CHARACTERS.findIndex((_, i) => !used.has(i));
+        this.players.push({ id, name: String(m.name || 'Jugador').slice(0, 12), ci });
+        this.broadcastLobby();
+        audio.play('got');
+      } else if (m.t === 'state' && Array.isArray(m.s)) {
+        const k = race.karts.find((x) => x.owner === id && x.remote);
+        if (k && this.racing) k.applyNet(m.s);
+      } else if (m.t === 'use') {
+        const k = race.karts.find((x) => x.owner === id && x.remote);
+        if (k && this.racing && race.phase !== 'intro' && race.phase !== 'countdown') race.useItem(k);
+      }
+      return;
+    }
+    // ---- invitado ----
+    switch (m.t) {
+      case 'lobby':
+        this.players = m.players; this.track = m.track; this.cc = m.cc; this.racing = m.racing;
+        if (!m.racing && (state !== 'menu' || ui.current !== 'lobby')) this.showLobby();
+        else this.renderLobby();
+        break;
+      case 'full':
+        this.close();
+        this.status('La sala está llena (máximo 4 personas).');
+        ui.show('online');
+        break;
+      case 'start': this.launch(m); break;
+      case 'snap': this.applySnap(m); break;
+      case 'hit': if (race.player && state !== 'menu') race.player.hit(m.kind, m.shrink); break;
+      case 'fx': if (race.player && state !== 'menu') race.fx(race.player, m); break;
+      case 'ev':
+        if (state === 'menu') break;
+        if (m.e === 'boom') race.explodeFx(m.x, m.z);
+        else if (m.e === 'pop') race.explodeSmall(m.x, m.z);
+        else if (m.e === 'storm') { audio.play('storm'); flash(); }
+        break;
+      default: break;
+    }
+  },
+  onLeave(id) {
+    if (!this.isHost()) {
+      // se fue el anfitrión
+      toMenu();
+      showMsg('Se cortó la conexión con el anfitrión de la sala.');
+      return;
+    }
+    this.players = this.players.filter((p) => p.id !== id);
+    const k = race.karts.find((x) => x.owner === id);
+    if (k && this.racing) {
+      // su kart sigue corriendo manejado por la computadora
+      k.remote = false; k.netSend = null; k.human = false; k.owner = null;
+      k.ai = newAI(CC[race.cc].ai); k.maxS = k.s; k.y = 0; k.vy = 0;
+      if (k.tag) { k.mesh.remove(k.tag); k.tag = null; }
+    }
+    this.broadcastLobby();
+  },
+  start() {
+    if (!this.isHost()) return;
+    audio.play('click');
+    const used = new Set(this.players.map((p) => p.ci));
+    const ai = CHARACTERS.map((_, i) => i).filter((i) => !used.has(i)).sort(() => Math.random() - 0.5).slice(0, 8 - this.players.length);
+    const roster = [
+      ...ai.map((ci) => ({ ci, owner: null, name: '' })),
+      ...this.players.map((p) => ({ ci: p.ci, owner: p.id, name: p.name })),
+    ];
+    const msg = { t: 'start', track: this.track, cc: this.cc, roster, pads: [rand(-4, 4), rand(-4, 4), rand(-4, 4)].map(r2) };
+    this.racing = true;
+    this.session.broadcast(msg);
+    this.launch(msg);
+    this.session.broadcast({ t: 'lobby', players: this.players, track: this.track, cc: this.cc, racing: true });
+  },
+  launch(m) {
+    const myIndex = m.roster.findIndex((r) => r.owner === this.session.myId);
+    if (myIndex < 0) { this.racing = true; this.renderLobby(); return; } // entró con la carrera empezada
+    this.racing = true;
+    selChar = m.roster[myIndex].ci;
+    race.mode = 'online'; race.cc = m.cc; race.gp = null;
+    race.playerChar = selChar;
+    startRace(m.track, { roster: m.roster, pads: m.pads, myIndex });
+  },
+  backToLobby() {
+    this.racing = false;
+    this.broadcastLobby();
+    this.showLobby();
+  },
+  showLobby() {
+    state = 'menu';
+    race.phase = 'menu';
+    audio.engine(0, 1, false, false); audio.squeal(false);
+    if (race.karts.length) showroomOn();
+    ui.stack = ['title']; ui.current = null;
+    ui.show('lobby');
+    this.renderLobby();
+  },
+  renderLobby() {
+    if (!this.session) return;
+    $('lobby-code').textContent = this.session.code;
+    const ul = $('lobby-players');
+    ul.innerHTML = '';
+    const me = this.session.myId;
+    for (const p of this.players) {
+      const c = CHARACTERS[p.ci] || CHARACTERS[0];
+      const li = document.createElement('li');
+      li.innerHTML = `<span class="dot" style="display:inline-block;width:14px;height:14px;border-radius:50%;border:2px solid #fff;background:#${_col.set(c.color).getHexString()}"></span>${c.icon} ${escapeHtml(p.name)} <small>${p.id === 'host' ? 'anfitrión' : ''}${p.id === me ? ' (vos)' : ''}</small>`;
+      ul.appendChild(li);
+    }
+    if (!this.players.length) ul.innerHTML = '<li>Conectando…</li>';
+    const host = this.isHost();
+    $('lobby-host').classList.toggle('hidden', !host);
+    $('lobby-track').textContent = TRACKS[this.track].name;
+    $('lobby-cc').textContent = `Dificultad: ${CC[this.cc].name}`;
+    const free = 8 - this.players.length;
+    $('lobby-wait').textContent = host
+      ? `${this.players.length}/${MAX_HUMANS} jugadores · ${free} rivales de la computadora`
+      : this.racing ? 'Hay una carrera en curso. Entrás en la próxima.' : `Esperando que el anfitrión empiece… (${TRACKS[this.track].name}, ${CC[this.cc].name})`;
+  },
+  tick(dt) {
+    if (!this.session || !race.net) return;
+    this.sendT -= dt;
+    if (this.sendT > 0) return;
+    if (this.isHost()) {
+      this.sendT = 1 / 15;
+      if (this.session.conns.size) this.session.broadcast(this.snapshot());
+    } else {
+      this.sendT = 1 / 20;
+      if (race.player) this.session.send('host', { t: 'state', s: race.player.netState() });
+    }
+  },
+  snapshot() {
+    return {
+      t: 'snap',
+      k: race.karts.map((k) => k.netState()),
+      b: race.boxes.map((b) => (b.respawn > 0 ? 0 : 1)).join(''),
+      p: race.projectiles.map((p) => [p.id, p.type === 'missile' ? 0 : 1, r2(p.x), r2(p.y ?? 1), r2(p.z), r2(p.h ?? 0)]),
+      h: race.hazards.map((h) => [h.id, r2(h.x), r2(h.z)]),
+    };
+  },
+  applySnap(m) {
+    if (state === 'menu' || !race.player || !Array.isArray(m.k) || m.k.length !== race.karts.length) return;
+    m.k.forEach((a, i) => {
+      const k = race.karts[i];
+      if (!k.isPlayer) k.applyNet(a);
+      const it = a[17] >= 0 ? ITEM_KEYS[a[17]] : null;
+      if (k.isPlayer && it && !k.item && a[19] <= 0 && k.rollT > 0) audio.play('got');
+      k.item = it; k.itemCount = a[18]; k.rollT = a[19];
+    });
+    race.boxes.forEach((b, i) => {
+      const vis = m.b[i] === '1';
+      if (!vis && b.mesh.visible) {
+        b.mesh.visible = false; b.respawn = 1;
+        race.boxBurst(b);
+        if (race.isNear(b)) audio.play('box');
+      } else if (vis && !b.mesh.visible) { b.mesh.visible = true; b.respawn = 0; }
+    });
+    syncNetList(race.projectiles, m.p, (e) => (e[1] === 0 ? missileGeo.clone() : makeBomb()), (o, e, isNew) => {
+      o.type = e[1] === 0 ? 'missile' : 'bomb';
+      o.tx = e[2]; o.ty = e[3]; o.tz = e[4]; o.h = e[5];
+      if (isNew) { o.x = o.tx; o.y = o.ty; o.z = o.tz; if (race.isNear(o)) audio.play('shoot'); }
+    });
+    syncNetList(race.hazards, m.h, () => makeOil(), (o, e) => {
+      o.type = 'oil'; o.x = e[1]; o.z = e[2];
+      o.mesh.position.x = o.x; o.mesh.position.z = o.z;
+    });
+  },
+};
+function syncNetList(arr, entries, make, upd) {
+  if (!Array.isArray(entries)) return;
+  const byId = new Map(arr.map((o) => [o.id, o]));
+  const seen = new Set();
+  for (const e of entries) {
+    let o = byId.get(e[0]);
+    const isNew = !o;
+    if (isNew) { o = { id: e[0], mesh: make(e) }; scene.add(o.mesh); arr.push(o); }
+    upd(o, e, isNew);
+    seen.add(e[0]);
+  }
+  for (let i = arr.length - 1; i >= 0; i--) if (!seen.has(arr[i].id)) { scene.remove(arr[i].mesh); arr.splice(i, 1); }
+}
+function showMsg(text) {
+  $('msg-text').textContent = text;
+  ui.stack = []; ui.current = null;
+  ui.show('msg');
+}
+$('btn-net-create').addEventListener('click', () => online.create());
+window.addEventListener('pagehide', () => online.close());
+$('btn-net-join').addEventListener('click', () => online.join());
+$('net-code').addEventListener('keydown', (e) => { if (e.key === 'Enter') online.join(); });
+$('btn-lobby-start').addEventListener('click', () => online.start());
+$('btn-lobby-leave').addEventListener('click', () => { online.close(); ui.stack = ['title']; ui.current = null; ui.show('online'); online.status(''); });
+$('lobby-track-prev').addEventListener('click', () => { online.track = (online.track + TRACKS.length - 1) % TRACKS.length; online.broadcastLobby(); });
+$('lobby-track-next').addEventListener('click', () => { online.track = (online.track + 1) % TRACKS.length; online.broadcastLobby(); });
+$('lobby-cc').addEventListener('click', () => { online.cc = (online.cc + 1) % CC.length; online.broadcastLobby(); });
+$('btn-msg-ok').addEventListener('click', () => { ui.stack = []; ui.current = null; ui.show('title'); });
+
+// ============================================================================
 // Bucle principal
 // ============================================================================
 const clock = new THREE.Clock();
@@ -2128,7 +2581,7 @@ let menuT = 0;
 function frame() {
   const dt = Math.min(clock.getDelta(), 1 / 20);
   pollInput();
-  if (state === 'game') {
+  if (state === 'game' || (state === 'paused' && race.net)) {
     // subpasos para estabilidad
     const steps = dt > 1 / 45 ? 2 : 1;
     for (let i = 0; i < steps; i++) race.update(dt / steps);
@@ -2139,6 +2592,7 @@ function frame() {
     audio.engine(P.speed, P.maxSpeed, P.boostT > 0, race.phase !== 'finished');
     audio.squeal(P.drift !== 0 && P.y < 0.1);
     if (race.snow) race.snow.position.set(P.x, 0, P.z), animateSnow(dt);
+    online.tick(dt);
   } else if (state === 'menu') {
     menuT += dt;
     if (previewKart) {
@@ -2179,4 +2633,4 @@ $('loading').classList.add('hidden');
 requestAnimationFrame(frame);
 
 // Exponer para pruebas automatizadas
-window.__milex = { race, input, CHARACTERS, TRACKS, startRace, get state() { return state; } };
+window.__milex = { race, input, online, CHARACTERS, TRACKS, startRace, get state() { return state; } };
