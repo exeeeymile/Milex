@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import * as T from './textures.js';
+import { isTouch } from './touch.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 
@@ -835,7 +836,7 @@ export class World {
          transformed.z += cos(uTime * 1.3 + wp.x * 0.1) * h * h * 0.8;`
       );
     };
-    const count = 1600;
+    const count = isTouch ? 500 : 1600;
     const grass = new THREE.InstancedMesh(bladeGeo, bladeMat, count);
     const dummy = new THREE.Object3D();
     for (let i = 0; i < count; i++) {

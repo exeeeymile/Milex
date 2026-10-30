@@ -40,6 +40,8 @@ Hay 15 botones dorados escondidos. Con **F** se abrazan, con **1** saludan y con
 
 También funciona con joystick (A saltar, B golpe, X usar, Y abrazo, RB correr).
 
+**En el celular** (mejor horizontal): joystick a la izquierda para moverse (al fondo corre), arrastrar el dedo por la pantalla para girar la cámara, y botones a la derecha: ⤒ saltar (mantener para planear con Mile), ⬇ golpe (Exe), ✋ usar, 💞 abrazo. Arriba a la derecha: pausa, saludo y baile.
+
 ## Jugar en tu compu (misma red)
 
 ```bash

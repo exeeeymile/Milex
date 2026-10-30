@@ -6,6 +6,7 @@ import { Effects } from './effects.js';
 import { Net } from './net.js';
 import { PeerNet } from './peernet.js';
 import { sfx, unlockAudio, startMusic, toggleMusic } from './audio.js';
+import { isTouch, touch, setupTouch, showTouch, goFullscreen } from './touch.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -13,7 +14,7 @@ const $ = (id) => document.getElementById(id);
 
 const canvas = $('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, isTouch ? 1.5 : 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -62,7 +63,7 @@ function makeScene() {
   scene.add(hemi);
   const sun = new THREE.DirectionalLight('#fff1d6', 2.6);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.mapSize.setScalar(isTouch ? 1024 : 2048);
   const sc = sun.shadow.camera;
   sc.left = -28; sc.right = 28; sc.top = 28; sc.bottom = -28; sc.near = 1; sc.far = 120;
   sun.shadow.bias = -0.0004;
@@ -310,7 +311,9 @@ function startGame(opts) {
     buildGame(opts);
     show(null);
     $('hud').classList.remove('hidden');
-    $('click-hint').classList.add('show');
+    $('click-hint').classList.toggle('show', !isTouch);
+    showTouch(true, { kind: activePlayer().kind, solo: game.mode === 'solo' });
+    goFullscreen();
     startMusic();
   }, 30);
 }
@@ -388,6 +391,7 @@ function restartGame() {
   if (game.mode === 'online') opts.startTime = game.startTime;
   disposeGame();
   buildGame(opts);
+  showTouch(true, { kind: activePlayer().kind, solo: game.mode === 'solo' });
   show(null);
   $('hud').classList.remove('hidden');
 }
@@ -401,6 +405,7 @@ function disposeGame() {
 }
 
 function quitToMenu() {
+  showTouch(false);
   disposeGame();
   if (document.pointerLockElement) document.exitPointerLock();
   net.close();
@@ -414,12 +419,13 @@ function setPaused(p) {
   if (!game) return;
   game.paused = p;
   show(p ? 'pause' : null);
-  $('click-hint').classList.toggle('show', !p && document.pointerLockElement !== canvas);
+  $('click-hint').classList.toggle('show', !p && !isTouch && document.pointerLockElement !== canvas);
+  showTouch(!p, { kind: activePlayer().kind, solo: game.mode === 'solo' });
 }
 
 $('btn-resume').onclick = () => {
   setPaused(false);
-  canvas.requestPointerLock?.();
+  if (!isTouch) canvas.requestPointerLock?.();
 };
 // en línea el servidor devuelve 'restart' a los dos, así reinician juntos
 const requestRestart = () => (game.mode === 'online' ? net.send({ t: 'restart' }) : restartGame());
@@ -440,6 +446,12 @@ function partnerOf(p) {
 function updateAbilityHud() {
   const p = activePlayer();
   const lines = [`Jugás con <b>${p.kind === 'exe' ? 'Exe' : 'Mile'}</b>`];
+  showTouch(!game.paused && !game.won, { kind: p.kind, solo: game.mode === 'solo' });
+  if (isTouch) {
+    lines.push(p.kind === 'exe' ? '<b>⬇ Golpe</b> en el aire' : '<b>Mantené ⤒</b> en el aire: planear');
+    $('hud-ability').innerHTML = lines.join('<br>');
+    return;
+  }
   lines.push('<b>Espacio</b> saltar ×2 · <b>Shift</b> correr · <b>E</b> usar');
   if (p.kind === 'exe') lines.push('<b>Ctrl / Clic der.</b> en el aire: golpe de suelo');
   else lines.push('<b>Mantener Espacio</b> tras el doble salto: planear');
@@ -535,6 +547,7 @@ function win() {
     $('victory-stats').innerHTML = `Botones encontrados: <b>${game.world.collectedCount}/${game.world.collectibles.length}</b> · Tiempo: <b>${mins}:${String(secs).padStart(2, '0')}</b>`;
     if (document.pointerLockElement) document.exitPointerLock();
     $('hud').classList.add('hidden');
+    showTouch(false);
     show('victory');
   }, 2600);
 }
@@ -547,6 +560,9 @@ const hitPoint = new THREE.Vector3();
 
 function updateCamera(dt, p) {
   const sens = 0.0024;
+  mouseDX += touch.camDX;
+  mouseDY += touch.camDY;
+  touch.camDX = touch.camDY = 0;
   game.yaw -= mouseDX * sens;
   game.pitch = Math.max(-0.35, Math.min(1.25, game.pitch + mouseDY * sens));
   mouseDX = mouseDY = 0;
@@ -647,10 +663,10 @@ function updateHud(p) {
   const prompt = $('prompt');
   const lever = nearLever(p);
   let text = '';
-  if (lever) text = `E — Activar ${lever.label}`;
-  else if (other && other.pos.distanceTo(p.pos) < 2.4 && p.action !== 'hug') text = 'F — Abrazo 💞';
+  if (lever) text = isTouch ? `✋ Activar ${lever.label}` : `E — Activar ${lever.label}`;
+  else if (other && other.pos.distanceTo(p.pos) < 2.4 && p.action !== 'hug') text = isTouch ? '💞 Abrazo' : 'F — Abrazo 💞';
   else if (p.kind === 'mile' && insideZone(p.pos, world.catapult.launchZone) && world.catapult.fireT < 0)
-    text = game.mode === 'solo' ? 'Tab: cambiá a Exe y golpeá el mango' : 'Esperá a que Exe golpee el mango';
+    text = game.mode === 'solo' ? (isTouch ? '⇄ Cambiá a Exe y golpeá el mango' : 'Tab: cambiá a Exe y golpeá el mango') : 'Esperá a que Exe golpee el mango';
   prompt.textContent = text;
   prompt.classList.toggle('show', !!text);
 }
@@ -689,6 +705,16 @@ function gatherInput() {
     hug ||= y.down;
     sprint ||= rb.held || Math.hypot(ax, ay) > 0.95;
   }
+  if (isTouch) {
+    ix += touch.mx;
+    iz += touch.mz;
+    jumpPressed ||= touch.consume('jump');
+    jumpHeld ||= touch.jumpHeld;
+    poundPressed ||= touch.consume('pound');
+    interact ||= touch.consume('use');
+    hug ||= touch.consume('hug');
+    sprint ||= Math.hypot(touch.mx, touch.mz) > 0.92;
+  }
   const len = Math.hypot(ix, iz);
   if (len > 1) {
     ix /= len;
@@ -720,6 +746,9 @@ function frame() {
   const typing = document.activeElement && document.activeElement.tagName === 'INPUT';
   const input = game.paused || game.won || typing ? { ...noInput, interact: false, hug: false } : gatherInput();
 
+  if (touch.consume('swap')) pressed.add('Tab');
+  if (touch.consume('wave')) pressed.add('Digit1');
+  if (touch.consume('dance')) pressed.add('Digit2');
   if (!game.paused && !game.won) {
     if (pressed.has('Tab') && game.mode === 'solo') {
       game.active = 1 - game.active;
@@ -746,6 +775,7 @@ function frame() {
   }
   if (pressed.has('Escape') || pressed.has('KeyP')) setPaused(!game.paused);
   pressed.clear();
+  touch.events.clear();
   rightClick = false;
 
   // física de los jugadores locales
@@ -837,6 +867,7 @@ const menuWorld = { t: 0 };
   });
 })();
 
+setupTouch({ onPause: () => game && setPaused(true) });
 requestAnimationFrame(frame);
 
 // acceso para pruebas automáticas desde la consola
