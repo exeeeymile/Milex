@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Milex: Juntos</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <script type="importmap">
+    { "imports": { "three": "/vendor/three/build/three.module.js", "three/addons/": "/vendor/three/examples/jsm/" } }
+  </script>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <!-- Menú principal -->
+  <section id="menu" class="screen visible">
+    <div class="title-wrap">
+      <h1 class="logo"><span class="l-exe">Exe</span> <span class="amp">&amp;</span> <span class="l-mile">Mile</span></h1>
+      <p class="subtitle">Milex: Juntos — una aventura para dos</p>
+    </div>
+    <div class="panel">
+      <label class="field">Tu nombre
+        <input id="name" maxlength="16" placeholder="¿Cómo te llamás?" autocomplete="off" />
+      </label>
+      <button id="btn-create" class="btn primary">Crear sala</button>
+      <div class="join-row">
+        <input id="code" maxlength="4" placeholder="CÓDIGO" autocomplete="off" />
+        <button id="btn-join" class="btn">Unirme</button>
+      </div>
+      <button id="btn-solo" class="btn ghost">Practicar solo (Tab cambia de personaje)</button>
+      <p id="menu-error" class="error"></p>
+    </div>
+    <p class="hint">Necesitan ser dos: cada uno con su compu, la misma sala y muchas ganas de cooperar 💞</p>
+  </section>
+
+  <!-- Lobby -->
+  <section id="lobby" class="screen">
+    <div class="panel wide">
+      <p class="lobby-label">Código de la sala</p>
+      <div id="lobby-code" class="room-code">----</div>
+      <button id="btn-copy" class="btn small">Copiar link de invitación</button>
+      <div class="cards">
+        <div class="card exe" id="card-exe">
+          <div class="portrait exe-portrait"><div class="eye l"></div><div class="eye r"></div><div class="tuft"></div></div>
+          <h3>Exe</h3>
+          <p class="who">—</p>
+          <ul>
+            <li>Doble salto</li>
+            <li><b>Golpe de suelo</b>: rompe cajas, activa la catapulta</li>
+            <li>Su golpe dispara la catapulta del compañero</li>
+          </ul>
+        </div>
+        <div class="card mile" id="card-mile">
+          <div class="portrait mile-portrait"><div class="eye l"></div><div class="eye r"></div><div class="pig l"></div><div class="pig r"></div></div>
+          <h3>Mile</h3>
+          <p class="who">—</p>
+          <ul>
+            <li>Doble salto</li>
+            <li><b>Planeo</b> con su hoja-paraguas</li>
+            <li>Liviana: las corrientes de aire la elevan</li>
+          </ul>
+        </div>
+      </div>
+      <div class="lobby-actions">
+        <button id="btn-swap" class="btn">Intercambiar personajes</button>
+        <button id="btn-start" class="btn primary" disabled>Esperando a tu compañero…</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- HUD -->
+  <div id="hud" class="hidden">
+    <div id="hud-top">
+      <div class="badge" id="hud-buttons">🔘 <span>0</span>/<span id="hud-total">0</span></div>
+      <div class="badge" id="hud-section">El Patio</div>
+      <div class="badge small" id="hud-ping"></div>
+    </div>
+    <div id="hud-ability"></div>
+    <div id="partner-tag"><span class="arrow">▲</span><span class="pname"></span></div>
+    <div id="prompt"></div>
+    <div id="toast"></div>
+    <div id="click-hint">Hacé clic para controlar la cámara</div>
+  </div>
+
+  <!-- Pausa -->
+  <section id="pause" class="screen">
+    <div class="panel wide">
+      <h2>Pausa</h2>
+      <div class="controls">
+        <div><kbd>W A S D</kbd> mover</div>
+        <div><kbd>Mouse</kbd> cámara</div>
+        <div><kbd>Espacio</kbd> saltar / doble salto</div>
+        <div><kbd>Shift</kbd> correr</div>
+        <div><kbd>E</kbd> usar palanca / interactuar</div>
+        <div><kbd>Ctrl</kbd> o <kbd>Clic der.</kbd> golpe de suelo (Exe)</div>
+        <div><kbd>Mantener Espacio</kbd> planear (Mile)</div>
+        <div><kbd>F</kbd> abrazar · <kbd>1</kbd> saludar · <kbd>2</kbd> bailar</div>
+        <div><kbd>R</kbd> volver al último punto de control</div>
+        <div><kbd>M</kbd> música on/off</div>
+      </div>
+      <div class="lobby-actions">
+        <button id="btn-resume" class="btn primary">Seguir jugando</button>
+        <button id="btn-restart" class="btn">Reiniciar nivel</button>
+        <button id="btn-quit" class="btn ghost">Salir al menú</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Victoria -->
+  <section id="victory" class="screen">
+    <div class="panel wide">
+      <h2 class="big">¡Lo lograron juntos! 💖</h2>
+      <p id="victory-stats"></p>
+      <div class="lobby-actions">
+        <button id="btn-again" class="btn primary">Jugar de nuevo</button>
+        <button id="btn-victory-quit" class="btn ghost">Menú</button>
+      </div>
+    </div>
+  </section>
+
+  <div id="loading" class="screen"><div class="spinner"></div><p>Preparando el jardín…</p></div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

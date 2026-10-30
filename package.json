@@ -1,0 +1,17 @@
+{
+  "name": "milex-juntos",
+  "version": "1.0.0",
+  "description": "Milex: Juntos — aventura cooperativa online en 3D para dos jugadores",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "three": "0.170.0",
+    "ws": "8.18.0"
+  }
+}
