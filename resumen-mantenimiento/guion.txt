@@ -1,0 +1,46 @@
+Resumen de estudio. Organización y gestión integral de mantenimiento. Capítulo nueve, gestión de la información, y capítulo diez, gestión del cambio.
+
+Parte uno. Órdenes de trabajo, o O T.
+La orden de trabajo es el documento con el que el mando le dice al operario qué tarea hacer. Es la principal fuente de información de mantenimiento. Como mínimo lleva: número de orden correlativo, el equipo, el trabajo a realizar, herramientas y materiales, riesgos y equipos de protección, la prioridad, y fecha y hora de emisión.
+
+El flujo de una O T es así. Se genera la orden. Si requiere ejecución inmediata y hay personal en planta, es urgencia cero, ejecución inmediata. Si no hay personal, es urgencia cinco, llamada a retén. Si no es inmediata, se clasifica en urgencia uno, prioritaria; dos, normal; tres, no urgente; y cuatro, parada de unidad. Después sigue la cadena: aprobación por el jefe de mantenimiento, planificación por el encargado, preparación por el preparador, obtención del permiso de trabajo por operación, ejecución por el operario, entrega a planta, y supervisión e informe.
+
+Hay dos tipos de órdenes. La correctiva tiene tres zonas. Zona del solicitante: número, nombre, fecha y hora, y síntomas del equipo. Zona del organizador: nivel de prioridad, análisis de riesgos, precauciones, protección individual, materiales y fecha programada. Zona del ejecutante: inicio y fin, personas que intervinieron, repuesto consumido, descripción del trabajo, estado de la orden y observaciones.
+La preventiva se llama gama o ruta. Lleva código de gama, periodicidad, tiempo estimado, operarios, riesgos, herramientas, la lista de tareas, que es lo más importante, y los valores de referencia con sus rangos normales.
+
+Parte dos. Indicadores.
+No hay que calcular todos, solo los útiles. Cada indicador debe mostrarse con su valor actual, los valores de períodos anteriores y el objetivo marcado.
+
+Disponibilidad. Es el indicador más importante. Disponibilidad igual a horas totales menos horas de parada por mantenimiento, dividido horas totales. La disponibilidad total de la planta es la media de los equipos significativos. La disponibilidad por avería solo cuenta las paradas no programadas, y también es igual a M T B F menos M T T R, dividido M T B F.
+M T B F, tiempo medio entre fallos: horas totales del período dividido número de averías. Mide la frecuencia de las averías.
+M T T R, tiempo medio de reparación: horas de paro por averías dividido número de averías. Mide la importancia de cada avería.
+
+Indicadores de órdenes de trabajo. Número de O T generadas, por zonas, acabadas y pendientes; las pendientes se dividen en pendientes de repuesto, de parada del equipo, y por otras causas. Las O T de emergencia indican el estado de la planta: si son muchas, la planta está mal. Las horas estimadas de trabajo pendiente valen más que el número de órdenes. Índice de cumplimiento de la planificación: órdenes acabadas en la fecha planificada sobre órdenes totales. Desviación media del tiempo planificado, que puede medirse como retraso medio o como incremento medio de horas hombre. Y tiempo medio de resolución de una O T.
+
+Índices de coste: coste de mano de obra por secciones, coste de hora medio, que es coste total de mano de obra sobre horas de mantenimiento, coste de materiales, de subcontratos y de medios auxiliares como grúas. Todo se resume en una tabla de costes por secciones.
+
+Índices de tipo de mantenimiento: índice de programado, horas de programado sobre horas totales. Índice de correctivo, horas de correctivo sobre totales. Índice de emergencias, horas de O T de prioridad máxima sobre totales.
+
+Almacén y compras. Rotación: valor del repuesto consumido sobre valor del stock. Origen de materiales: material consumido del almacén sobre total consumido. Porcentaje de piezas con movimiento, para eliminar las que no rotan. Eficiencia de compras: cien menos los pedidos no atendidos en más de tres meses sobre pedidos cursados, por cien. Y tiempo medio de demora de pedidos.
+
+Seguridad y medio ambiente. Índice de frecuencia: accidentes con baja por un millón, sobre horas trabajadas. Índice de jornadas perdidas: jornadas perdidas por mil, sobre horas trabajadas. Tiempo medio de permanencia de residuos en planta. E incidentes ambientales graves por un millón sobre horas trabajadas.
+Formación: porcentaje de horas de formación sobre horas totales, y porcentaje de desarrollo del programa, horas realizadas sobre programadas.
+
+Parte tres. Informes periódicos y archivo.
+El informe periódico tiene siete apartados: aspectos generales, que son personal, medios, formación y seguridad; disponibilidad; costes; otros indicadores; principales incidentes; mejoras propuestas y realizadas; y programación del período siguiente. Clave: debe tener comentarios y conclusiones, no solo cifras.
+El archivo sigue el lema: un sitio para cada cosa y cada cosa en su sitio. Carpetas: uno, personal. Dos, herramientas y medios. Tres, plan de calidad. Cuatro, procedimientos de trabajo. Cinco, información económica. Seis, informes periódicos. Siete, plan de mantenimiento. Y una carpeta por cada zona de la planta con las gamas realizadas.
+Sobre el software de gestión, el objetivo es ahorrar dinero y tener información rápida. Los riesgos típicos son: más personal indirecto cargando datos, más papel, datos que no dan información, e información no fiable. Su implantación empieza por codificar los equipos en estructura de árbol, luego personal, tareas, repuesto, inventario y plan de mantenimiento.
+
+Parte cuatro. Gestión del cambio.
+Se cambia porque la disponibilidad no es adecuada, porque se quiere bajar el coste, o para modernizar. Personas clave: director de planta, director técnico, jefe de mantenimiento, auditor externo, coordinador del proyecto, técnico de apoyo, responsables de almacén y de taller.
+El cambio tiene cuatro fases: previa, implantación, desarrollo y optimización.
+
+Fase previa. Dura de uno a dos meses. Objetivo: saber dónde estamos y adónde queremos ir. Pasos: determinar la situación actual con una auditoría de mantenimiento, fijar objetivos de producción y económicos, y presentar las conclusiones en un plan de actuación.
+
+Fase de implantación. Dura de tres a seis meses. Objetivo: acciones rápidas, sencillas y visibles que generen confianza. Cinco acciones. Uno, reorganizar recursos humanos: organización central o descentralizada, horarios, organigrama, cualificación y cantidad de personal. Dos, organizar el almacén de repuesto: inventario, estanterías señalizadas y registro de entradas y salidas, unos dos meses. Tres, poner en marcha un plan de mantenimiento inicial, una versión cero, con equipos significativos y gamas estándar, de uno a dos meses. Cuatro, puesta a punto de la planta, reparando solo las anomalías rentables, de quince a sesenta días. Cinco, organizar el taller con el método cinco S: organización, orden, limpieza, limpieza estandarizada y disciplina, de quince a veinte días.
+
+Fase de desarrollo. Dura unos seis meses. Objetivo: estudio minucioso de cada equipo. Seis acciones. Uno, análisis de equipos con fichas: criticidad, modelo de mantenimiento, valores de referencia, repuesto, consumibles, formación, subcontratos y normativa. Dos, plan de mantenimiento revisado. Tres, tareas de parada para equipos de alta disponibilidad, que solo se atienden en paradas programadas. Cuatro, lista de repuesto mínimo. Cinco, plan de formación: cursos genéricos, cursos específicos, sesiones formativas cortas y formación en seguridad. Seis, subcontratos: todo el mantenimiento del equipo, solo averías, solo lo rutinario, o solo inspecciones.
+
+Fase de optimización. Es continua. Se analizan los resultados: disponibilidad, averías e incidencias, y coste. De ahí salen tres tipos de mejoras: técnicas, como cambios en las instalaciones y en el plan; organizativas, como redistribuir funciones y nuevos procedimientos; y económicas, como optimizar la plantilla, reducir subcontratación, consumo de repuesto e inmovilizado.
+
+Fin del resumen. Repasá las fórmulas de disponibilidad, M T B F y M T T R, y el orden de las cuatro fases: previa, implantación, desarrollo, optimización.
